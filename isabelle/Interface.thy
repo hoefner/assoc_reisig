@@ -1,0 +1,198 @@
+theory Interface
+  imports Graph Misc
+
+begin
+
+(* thought about partial function, but then I would have needed non-empty lists; 
+this one seems easier; empty list means no label of this kind in interface *)
+(* lists make re-indexing easier *)
+
+type_synonym ('n,'l) interface = "'l \<Rightarrow> 'n list"
+abbreviation inter_nodes :: "('n,'l) interface \<Rightarrow> ('n,'l) node set" where
+  "inter_nodes i \<equiv> {(n,l) | n l. n\<in>set(i l)}"
+
+primrec list_index_aux:: "'a \<Rightarrow> 'a list \<Rightarrow> nat \<Rightarrow> nat option" where
+  "list_index_aux a [] n = None" |
+  "list_index_aux a (x#xs) n = (if a=x then (Some n) else list_index_aux a xs (Suc n))" 
+
+abbreviation list_index :: "'a \<Rightarrow> 'a list \<Rightarrow> nat option" where
+  "list_index a l \<equiv> list_index_aux a l 0"
+
+definition index :: "('n,'l) interface \<Rightarrow> ('n,'l) node \<Rightarrow> nat option" where 
+  "index i n = list_index (node_id n) (i (label n))"
+
+abbreviation empty:: "'l \<Rightarrow> 'n list" ("\<lparr>\<rparr>") where
+  "empty \<equiv> \<lambda>l. []"
+
+lemma empty_inter_nodes:
+  "inter_nodes empty = {}"
+  by simp
+
+subsection \<open>Matching Lists\<close>
+(* could we allow the same node occur in the list multiple times? I guess not*)
+fun match_lists :: "'n list \<Rightarrow> 'n list \<Rightarrow> 'n \<rightharpoonup> 'n" where
+  "match_lists [] ys = Map.empty" | 
+  "match_lists xs [] = Map.empty" |
+  "match_lists (x#xs) (y#ys) = (match_lists xs ys)(x\<mapsto>y)"
+
+lemma match_lists_dom:
+  "dom (match_lists xs ys) = set (take (length ys) xs)"
+  apply(induct xs arbitrary: ys,simp)
+  by (smt (verit) dom_fun_upd length_0_conv length_tl list.discI list.sel(3) list.simps(15) 
+                  match_lists.elims option.distinct(1) take_Cons' take_eq_Nil)
+
+lemma match_lists_dom':
+  "dom (match_lists xs ys) \<subseteq> set xs"
+  by (simp add: match_lists_dom set_take_subset)
+
+lemma match_lists_restrict: 
+  "distinct xs \<Longrightarrow> match_lists xs ys |` set xs = match_lists xs ys"
+proof(induct xs arbitrary: ys, simp)
+  case (Cons x xs)
+  thus ?case 
+  proof(cases "ys=[]", simp)
+    case False
+    then obtain y ys' where y: "ys=y#ys'"
+      by (meson list.exhaust)
+    thus "match_lists (x # xs) ys |` set (x # xs) = match_lists (x # xs) ys"
+      using Cons.prems Cons.hyps by simp
+  qed
+qed
+
+lemma match_list_added:
+  assumes "(a, b) \<notin> map2set (match_lists xs ys)"
+  and "(a, b) \<in> map2set (match_lists (x # xs) (y#ys))"
+  shows "(a,b) = (x,y)"
+  using assms
+  by (smt (z3) dom_fun_upd fun_upd_other insertCI insertE map2set_def map_upd_Some_unfold 
+               match_lists.simps(3) mem_Collect_eq option.distinct(1) option.sel)
+
+lemma distinct_match_lists_restrict:
+  "distinct (x#xs) \<Longrightarrow> (match_lists (x#xs) (y#ys)) |` set xs = match_lists xs ys"
+  by (simp add: match_lists_restrict)
+
+lemma match_list_iso:
+  "distinct (x#xs) \<Longrightarrow> map2set (match_lists xs ys) \<subseteq> map2set (match_lists (x#xs) (y#ys))"
+  unfolding map2set_def
+  using Suc_leI match_lists_dom' by fastforce
+
+lemma match_lists_point1:
+  "(a,b) \<in> map2set (match_lists xs ys) 
+     \<Longrightarrow> (\<exists>(n::nat) < min (length xs) (length ys). a = xs!n \<and> b = ys!n)"
+unfolding map2set_def  
+proof(induct xs arbitrary: ys,fastforce)
+  case (Cons x xs)
+  thus ?case 
+  proof(cases "ys=[]", simp add: Cons.prems)
+    case False
+    then obtain y ys' 
+      where x1: "(a, b) \<in> map2set (match_lists (x # xs) (y#ys'))" and x2: "ys = y#ys'"
+      unfolding map2set_def
+      by (metis list.exhaust Cons.prems)
+    thus ?thesis
+      apply(cases "(a, b) \<in> map2set (match_lists xs ys')")
+       apply (metis map2set_def Cons.hyps Suc_leI x2 length_Cons less_Suc_eq_le min_less_iff_conj 
+                    nth_Cons_Suc)
+      using x1 x2 match_list_added by fastforce 
+  qed
+qed
+
+lemma match_lists_point2:
+  "\<lbrakk>distinct xs; (\<exists>n < min (length xs) (length ys). a = xs!n \<and> b = ys!n)\<rbrakk>
+      \<Longrightarrow> (a,b) \<in> map2set (match_lists xs ys)"
+proof(induct xs arbitrary: ys, fastforce)
+  case (Cons x xs)
+  thus ?case 
+  proof-
+    from Cons.prems(2)
+    obtain n where a1: "n<min (length (x # xs)) (length ys)\<and> a = (x # xs) ! n \<and> b = ys ! n"
+      by blast
+    thus ?thesis
+    proof(cases "ys=[]",simp add: Cons.prems)
+      case False
+      then obtain y ys' where a2: "ys = y#ys'"
+        using list.exhaust by blast
+      thus ?thesis
+      proof(cases "n=0",(auto simp:  map2set_def a1 a2)[1])
+        case False
+        hence "(a, b) \<in> map2set (match_lists xs ys')"
+          using a1 a2 gr0_conv_Suc Cons.hyps Cons.prems(1) by fastforce
+        thus ?thesis
+          by (metis Cons.prems(1) a2 match_list_iso subset_eq)
+      qed
+    qed
+  qed
+qed
+
+lemma match_lists_point:
+  assumes "distinct xs"
+  shows "(a,b) \<in> map2set (match_lists xs ys) 
+         \<longleftrightarrow> (\<exists>(n::nat) < min (length xs) (length ys). a = xs!n \<and> b = ys!n)"
+  by (metis assms match_lists_point1 match_lists_point2)
+
+lemma match_lists_point':  
+  assumes "distinct xs"
+  shows "a\<in>dom(match_lists xs ys) 
+         \<longleftrightarrow> (\<exists>(n::nat) < min(length xs)(length ys). a = xs!n \<and> the((match_lists xs ys) a) = ys!n)"
+  using match_lists_point assms unfolding map2set_def
+  by fastforce
+
+
+
+subsection \<open>Matching Interfaces\<close>
+(* function makes it easier to have disjointness, as nodes are defined as pairs n,l *)
+definition match_inter :: "('n,'l) interface \<Rightarrow> ('n,'l) interface \<Rightarrow> 'l \<Rightarrow> 'n \<rightharpoonup> 'n" where
+  "match_inter i j = (\<lambda>l. match_lists (i l) (j l))"
+
+lemma match_inter_point: 
+  assumes "distinct (i l)"
+  shows "(a, b) \<in> map2set ((match_inter i j) l) 
+         \<longleftrightarrow> (\<exists>n < min (length (i l)) (length (j l)). a = (i l)!n \<and> b = (j l)!n)"
+  unfolding match_inter_def
+    using assms by (rule match_lists_point)
+
+lemma match_inter_point': 
+  assumes "distinct (i l)"
+  shows "a \<in> dom((match_inter i j) l) 
+         \<longleftrightarrow> (\<exists>n<min(length(i l)) (length(j l)). a=(i l)!n \<and> the(((match_inter i j) l) a)=(j l)!n)"
+  using match_inter_point assms unfolding map2set_def
+  by fastforce
+
+lemma match_inter_empty:
+  shows "match_inter \<lparr>\<rparr> i = (\<lambda>l. Map.empty)"
+  and "match_inter i \<lparr>\<rparr> = (\<lambda>l. Map.empty)"
+  unfolding match_inter_def
+   apply simp
+  by (metis list.discI match_lists.elims)
+
+
+subsection \<open>Matching -- in preparation\<close>
+
+definition inter_prune :: "('n,'l) interface \<Rightarrow> ('n,'l) interface \<Rightarrow> ('n,'l) interface" where
+  "inter_prune i j = (\<lambda>l. drop (length (j l)) (i l))"
+
+definition inter_comp :: "('n,'l) interface \<Rightarrow> ('n,'l) interface \<Rightarrow> ('n,'l) interface" (infixl "@@" 60) where
+  "inter_comp  i j = (\<lambda>l. (i l)@(j l))"
+
+lemma inter_comp_empty[simp]:
+  shows "\<lparr>\<rparr> @@ i = i"
+  and   "i @@ \<lparr>\<rparr> = i"
+  unfolding inter_comp_def
+  by force+
+
+lemma inter_comp_assoc:
+  "(i @@ j) @@ k = i @@ (j @@ k)"
+  unfolding inter_comp_def
+  by simp 
+
+lemma inter_prune_empty[simp]:
+  "inter_prune i \<lparr>\<rparr> = i"
+  unfolding inter_prune_def
+  by fastforce
+
+lemma inter_empty_prune[simp]:
+  "inter_prune \<lparr>\<rparr> i = \<lparr>\<rparr>"
+  unfolding inter_prune_def
+  by fastforce
+
+end
