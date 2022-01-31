@@ -112,6 +112,17 @@ lemma comp_merge_left:
   unfolding inter_prune_def inter_comp_def
   by (simp)
 
+(*
+lemma 
+  "match_lists (l @ m) n = (match_lists l n) ++ (match_lists m (drop (length m) n))"
+  apply(induct l arbitrary: m)
+  sledgehammer
+.
+
+lemma 
+  "match_inter (i @@ j) k = (match_inter i k) @@ match_inter j (drop (length )"
+*)
+
 (* may need preconditions *)
 lemma comp_merge_graph_nodes:
   "nodes_rename (nodes c) (match_inter (c\<^sup>\<star>) (\<^sup>\<star>d @@ inter_prune (\<^sup>\<star>e) (d\<^sup>\<star>))) \<union>
@@ -122,6 +133,8 @@ lemma comp_merge_graph_nodes:
        (nodes_rename (nodes c) (match_inter (c\<^sup>\<star>) (\<^sup>\<star>d)) \<union> nodes d, tss_rename (transitions c) (match_inter (c\<^sup>\<star>) (\<^sup>\<star>d)) \<union> transitions d))
      (match_inter (inter_prune (c\<^sup>\<star>) (\<^sup>\<star>d) @@ d\<^sup>\<star>) (\<^sup>\<star>e)) \<union>
     nodes e"
+  unfolding nodes_rename_def match_inter_def rename_def 
+  apply simp
   sorry
 
 lemma comp_merge_graph_tss:
@@ -140,7 +153,6 @@ lemma comp_merge_right:
     inter_prune (inter_prune (c\<^sup>\<star>) (\<^sup>\<star>d) @@ d\<^sup>\<star>) (\<^sup>\<star>e) @@ e\<^sup>\<star>"
   unfolding inter_prune_def inter_comp_def
   apply(standard)
-  sledgehammer
   sorry
 
 lemma comp_merge_assoc:

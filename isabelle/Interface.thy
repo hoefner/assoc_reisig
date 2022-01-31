@@ -35,6 +35,13 @@ fun match_lists :: "'n list \<Rightarrow> 'n list \<Rightarrow> 'n \<rightharpoo
   "match_lists xs [] = Map.empty" |
   "match_lists (x#xs) (y#ys) = (match_lists xs ys)(x\<mapsto>y)"
 
+lemma match_lists_empty[simp]:
+  shows "match_lists [] ys = Map.empty"
+  and "match_lists xs [] = Map.empty"
+  apply simp
+  using match_lists.elims by blast
+
+
 lemma match_lists_dom:
   "dom (match_lists xs ys) = set (take (length ys) xs)"
   apply(induct xs arbitrary: ys,simp)
@@ -137,7 +144,27 @@ lemma match_lists_point':
   using match_lists_point assms unfolding map2set_def
   by fastforce
 
+(* HERE *)
+lemma test:
+  "distinct (x # xs) \<Longrightarrow> x\<notin>dom (match_lists xs ys)"
+  by (meson distinct.simps(2) match_lists_dom' subsetD) 
 
+lemma match_lists_assoc:
+  "distinct (xs@ys) \<Longrightarrow> match_lists (xs@ys) zs = (match_lists xs zs) ++ (match_lists ys (drop (length xs) zs))"
+proof(induct xs arbitrary:zs, simp)
+  case (Cons x xs)
+  show "match_lists ((x # xs) @ ys) zs = match_lists (x # xs) zs ++ match_lists ys (drop (length (x # xs)) zs)"
+  proof(cases "zs=[]", simp)
+    case False
+    then obtain z zs' where z: "zs=z#zs'"
+      by (meson list.exhaust)
+    have "x\<notin>dom (match_lists ys (drop (length xs) zs'))"
+      using Cons.prems
+      by (metis Un_iff append_Cons distinct.simps(2) match_lists_dom' set_append subsetD)
+    thus "match_lists ((x # xs) @ ys) zs = match_lists (x # xs) zs ++ match_lists ys (drop (length (x # xs)) zs)"
+      by (metis z Cons.hyps Cons.prems append_Cons distinct.simps(2) drop_Suc_Cons length_Cons map_add_upd_left match_lists.simps(3))
+  qed
+qed
 
 subsection \<open>Matching Interfaces\<close>
 (* function makes it easier to have disjointness, as nodes are defined as pairs n,l *)
@@ -158,7 +185,7 @@ lemma match_inter_point':
   using match_inter_point assms unfolding map2set_def
   by fastforce
 
-lemma match_inter_empty:
+lemma match_inter_empty[simp]:
   shows "match_inter \<lparr>\<rparr> i = (\<lambda>l. Map.empty)"
   and "match_inter i \<lparr>\<rparr> = (\<lambda>l. Map.empty)"
   unfolding match_inter_def
