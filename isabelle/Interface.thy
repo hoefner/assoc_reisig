@@ -8,9 +8,12 @@ this one seems easier; empty list means no label of this kind in interface *)
 (* lists make re-indexing easier *)
 
 type_synonym ('n,'l) interface = "'l \<Rightarrow> 'n list"
-abbreviation inter_nodes :: "('n,'l) interface \<Rightarrow> ('n,'l) node set" where
-  "inter_nodes i \<equiv> {(n,l) | n l. n\<in>set(i l)}"
+definition inter_nodes :: "('n,'l) interface \<Rightarrow> 'n set" where
+  "inter_nodes i \<equiv> \<Union>{set (i l)| l. True}"
 
+
+(* index calculation is only for fun to make it compatible to the paper, 
+but is of no relevance for this development *)
 primrec list_index_aux:: "'a \<Rightarrow> 'a list \<Rightarrow> nat \<Rightarrow> nat option" where
   "list_index_aux a [] n = None" |
   "list_index_aux a (x#xs) n = (if a=x then (Some n) else list_index_aux a xs (Suc n))" 
@@ -18,29 +21,30 @@ primrec list_index_aux:: "'a \<Rightarrow> 'a list \<Rightarrow> nat \<Rightarro
 abbreviation list_index :: "'a \<Rightarrow> 'a list \<Rightarrow> nat option" where
   "list_index a l \<equiv> list_index_aux a l 0"
 
-definition index :: "('n,'l) interface \<Rightarrow> ('n,'l) node \<Rightarrow> nat option" where 
-  "index i n = list_index (node_id n) (i (label n))"
+definition index :: "('n,'l) interface \<Rightarrow> 'n \<Rightarrow> 'l \<Rightarrow> nat option" where 
+  "index i n l = list_index n (i l)"
+(* end index calculation *)
 
 abbreviation empty:: "'l \<Rightarrow> 'n list" ("\<lparr>\<rparr>") where
   "empty \<equiv> \<lambda>l. []"
 
 lemma empty_inter_nodes:
-  "inter_nodes empty = {}"
-  by simp
+  "inter_nodes \<lparr>\<rparr> = {}"
+  by (simp add: inter_nodes_def)
 
 subsection \<open>Matching Lists\<close>
-(* could we allow the same node occur in the list multiple times? I guess not*)
+(* could we allow the same node occur in the list multiple times? I guess not;
+this will be ruled out by the definition of is_ComponentInterface *)
 fun match_lists :: "'n list \<Rightarrow> 'n list \<Rightarrow> 'n \<rightharpoonup> 'n" where
   "match_lists [] ys = Map.empty" | 
   "match_lists xs [] = Map.empty" |
   "match_lists (x#xs) (y#ys) = (match_lists xs ys)(x\<mapsto>y)"
+ 
 
 lemma match_lists_empty[simp]:
   shows "match_lists [] ys = Map.empty"
   and "match_lists xs [] = Map.empty"
-  apply simp
-  using match_lists.elims by blast
-
+  using match_lists.elims by blast+
 
 lemma match_lists_dom:
   "dom (match_lists xs ys) = set (take (length ys) xs)"
@@ -52,6 +56,10 @@ lemma match_lists_dom':
   "dom (match_lists xs ys) \<subseteq> set xs"
   by (simp add: match_lists_dom set_take_subset)
 
+lemma distinct_dom:
+  "distinct(x#xs) \<Longrightarrow> (x \<notin> dom (match_lists xs ys))"
+  by (meson distinct.simps(2) match_lists_dom' subsetD)
+
 lemma match_lists_restrict: 
   "distinct xs \<Longrightarrow> match_lists xs ys |` set xs = match_lists xs ys"
 proof(induct xs arbitrary: ys, simp)
@@ -62,7 +70,7 @@ proof(induct xs arbitrary: ys, simp)
     then obtain y ys' where y: "ys=y#ys'"
       by (meson list.exhaust)
     thus "match_lists (x # xs) ys |` set (x # xs) = match_lists (x # xs) ys"
-      using Cons.prems Cons.hyps by simp
+      using Cons by simp
   qed
 qed
 
@@ -77,6 +85,21 @@ lemma match_list_added:
 lemma distinct_match_lists_restrict:
   "distinct (x#xs) \<Longrightarrow> (match_lists (x#xs) (y#ys)) |` set xs = match_lists xs ys"
   by (simp add: match_lists_restrict)
+
+lemma match_lists_minimum:
+  "let n = min(length xs) (length ys) 
+   in match_lists xs ys = match_lists (take n xs) (take n ys)"
+proof(induct xs arbitrary: ys, fastforce)
+  case (Cons x xs)
+  thus ?case 
+  proof(cases "ys = []", fastforce)
+    case False
+    then obtain y ys' where y: "ys=y#ys'"
+      by (meson list.exhaust)
+    thus ?thesis
+      by (metis Cons.hyps length_Cons match_lists.simps(3) min_Suc_Suc take_Suc_Cons)
+  qed
+qed
 
 lemma match_list_iso:
   "distinct (x#xs) \<Longrightarrow> map2set (match_lists xs ys) \<subseteq> map2set (match_lists (x#xs) (y#ys))"
@@ -144,10 +167,11 @@ lemma match_lists_point':
   using match_lists_point assms unfolding map2set_def
   by fastforce
 
-(* HERE *)
+(*
 lemma test:
   "distinct (x # xs) \<Longrightarrow> x\<notin>dom (match_lists xs ys)"
   by (meson distinct.simps(2) match_lists_dom' subsetD) 
+*)
 
 lemma match_lists_assoc:
   "distinct (xs@ys) \<Longrightarrow> match_lists (xs@ys) zs = (match_lists xs zs) ++ (match_lists ys (drop (length xs) zs))"
@@ -170,6 +194,11 @@ subsection \<open>Matching Interfaces\<close>
 (* function makes it easier to have disjointness, as nodes are defined as pairs n,l *)
 definition match_inter :: "('n,'l) interface \<Rightarrow> ('n,'l) interface \<Rightarrow> 'l \<Rightarrow> 'n \<rightharpoonup> 'n" where
   "match_inter i j = (\<lambda>l. match_lists (i l) (j l))"
+
+(* 
+(\<lambda>l. set (zip (i l) (j l))) 
+*)
+
 
 lemma match_inter_point: 
   assumes "distinct (i l)"
@@ -214,12 +243,40 @@ lemma inter_comp_assoc:
 
 lemma inter_prune_empty[simp]:
   "inter_prune i \<lparr>\<rparr> = i"
-  unfolding inter_prune_def
-  by fastforce
-
-lemma inter_empty_prune[simp]:
   "inter_prune \<lparr>\<rparr> i = \<lparr>\<rparr>"
   unfolding inter_prune_def
-  by fastforce
+  by fastforce+
+
+
+lemma map2set_extend:
+  assumes "distinct (x#xs)"
+  shows" map2set (match_lists (x # xs) (y#ys)) = {(x,y)} \<union> map2set (match_lists xs ys)"
+proof-
+  have "map2set (match_lists (x # xs) (y#ys)) = map2set (Map.empty(x\<mapsto>y) ++ (match_lists xs ys))"
+    by (metis assms distinct_dom empty_map_add map_add_upd_left match_lists.simps(3))
+  also have "... = map2set (Map.empty(x\<mapsto>y)) \<union> map2set ((match_lists xs ys))"
+    apply(rule map2set_union)
+    by (metis assms distinct_dom Int_empty_left Int_insert_left_if0 dom_eq_singleton_conv)
+  ultimately show ?thesis 
+    by (simp add: map2set_single)
+qed
+
+lemma match_lists_set_zip:
+  "distinct xs \<Longrightarrow> map2set(match_lists xs ys) = set (zip xs ys)"
+proof(induct xs arbitrary:ys, simp add: map2set_def)
+  case (Cons x xs)
+  then show ?case
+  proof(cases "ys = []", simp add: map2set_def)
+  assume "distinct (x#xs)"
+  case False
+   then obtain y ys' where y: "ys=y#ys'"
+      by (meson list.exhaust)
+    thus " map2set (match_lists (x # xs) ys) = set (zip (x # xs) ys)"
+      using Cons 
+      by (smt (z3) Collect_cong map2set_def match_lists_point mem_Collect_eq set_zip)
+  qed
+qed
+
+
 
 end

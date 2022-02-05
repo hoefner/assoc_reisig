@@ -15,50 +15,43 @@ definition tss_sources :: "'a tss \<Rightarrow> 'a set" where
 definition tss_targets :: "'a tss \<Rightarrow> 'a set" where
   "tss_targets T \<equiv> {snd t | t. t\<in>T}"
 
-abbreviation tss_nodes :: "'a tss \<Rightarrow> 'a set" where
+abbreviation (import) tss_nodes :: "'a tss \<Rightarrow> 'a set" where
   "tss_nodes T \<equiv> tss_sources T \<union> tss_targets T"
 
 
-subsection \<open>Graph\<close>
+subsection \<open>Graph with labelled nodes\<close>
 
-type_synonym 'a graph = "'a set \<times> 'a tss"
+type_synonym ('n,'l) node_set = "('n \<rightharpoonup> 'l)"
+type_synonym ('n,'l) graph = "('n,'l) node_set \<times> 'n tss"
 
-definition graph_nodes :: "'a graph \<Rightarrow> 'a  set" where
-  "graph_nodes g \<equiv> fst g"
+definition graph_nodes :: "('n,'l) graph \<Rightarrow> 'n set" where
+  "graph_nodes G \<equiv> dom(fst G)"
 
-definition graph_transitions :: "'a graph \<Rightarrow> 'a tss" where
-  "graph_transitions g \<equiv> snd g"
+abbreviation graph_labels :: "('n,'l) graph \<Rightarrow> 'l set" where
+  "graph_labels G \<equiv> ran(fst G) "
 
-definition is_graph :: "'a graph \<Rightarrow> bool" where
-  "is_graph g \<equiv> tss_nodes(graph_transitions g) \<subseteq> graph_nodes g"
+definition graph_transitions :: "('n,'l) graph \<Rightarrow> 'n tss" where
+  "graph_transitions G \<equiv> snd G"
+
+(* maybe get rid of it *)
+definition is_graph :: "('n,'l) graph \<Rightarrow> bool" where
+  "is_graph G \<equiv> tss_nodes(snd G) \<subseteq> dom(fst G)"
+
+lemma is_graph_var:
+  "is_graph G \<equiv> tss_nodes(graph_transitions G) \<subseteq> graph_nodes G"
+  by (simp add: is_graph_def graph_nodes_def graph_transitions_def)
 
 lemma nodes_is_graph:
-  shows "is_graph g \<Longrightarrow> tss_sources(graph_transitions g) \<subseteq> graph_nodes g"
-  and "is_graph g \<Longrightarrow> tss_targets(graph_transitions g) \<subseteq> graph_nodes g"
-  unfolding is_graph_def tss_sources_def tss_targets_def
-  by blast+
+  assumes "is_graph G"
+  shows "tss_sources(graph_transitions G) \<subseteq> graph_nodes G"
+  and "tss_targets(graph_transitions G) \<subseteq> graph_nodes G"
+  by (metis assms is_graph_var sup.bounded_iff)+
 
-abbreviation empty :: "'a set \<times> 'a tss" where
-  "empty \<equiv> ({},{})"
+abbreviation empty :: "('n,'l) graph" where
+  "empty \<equiv> (Map.empty,{})"
 
 lemma empty_isgraph:
   "is_graph empty"
-  unfolding is_graph_def graph_transitions_def tss_sources_def tss_targets_def
-  by simp
-
-subsection \<open>Labelled Nodes\<close>
-type_synonym ('n,'l) node = "'n \<times> 'l" 
-definition node_id :: "('n,'l) node \<Rightarrow> 'n" where 
-  "node_id n \<equiv> fst n"
-definition label :: "('n,'l) node \<Rightarrow> 'l" where 
-  "label n \<equiv> snd n"
-
-subsection \<open>Graphs with Labelled Nodes\<close>
-(* labels are of course not unique *)
-type_synonym ('n,'l) labelledGraph = "('n,'l) node graph"
-abbreviation graph_nodeIds :: "('n,'l) labelledGraph \<Rightarrow> 'n set" where
-  "graph_nodeIds g \<equiv> {node_id n |n. n\<in>fst g}"
-abbreviation graph_nodeLabels :: "('n,'l) labelledGraph \<Rightarrow> 'l set" where
-  "graph_nodeLabels g \<equiv> {label n |n. n\<in>fst g}"
+  by (simp add: is_graph_def graph_transitions_def tss_sources_def tss_targets_def)
 
 end
