@@ -39,7 +39,6 @@ fun match_lists :: "'n list \<Rightarrow> 'n list \<Rightarrow> 'n \<rightharpoo
   "match_lists [] ys = Map.empty" | 
   "match_lists xs [] = Map.empty" |
   "match_lists (x#xs) (y#ys) = (match_lists xs ys)(x\<mapsto>y)"
- 
 
 lemma match_lists_empty[simp]:
   shows "match_lists [] ys = Map.empty"
@@ -167,12 +166,6 @@ lemma match_lists_point':
   using match_lists_point assms unfolding map2set_def
   by fastforce
 
-(*
-lemma test:
-  "distinct (x # xs) \<Longrightarrow> x\<notin>dom (match_lists xs ys)"
-  by (meson distinct.simps(2) match_lists_dom' subsetD) 
-*)
-
 lemma match_lists_assoc:
   "distinct (xs@ys) \<Longrightarrow> match_lists (xs@ys) zs = (match_lists xs zs) ++ (match_lists ys (drop (length xs) zs))"
 proof(induct xs arbitrary:zs, simp)
@@ -194,10 +187,6 @@ subsection \<open>Matching Interfaces\<close>
 (* function makes it easier to have disjointness, as nodes are defined as pairs n,l *)
 definition match_inter :: "('n,'l) interface \<Rightarrow> ('n,'l) interface \<Rightarrow> 'l \<Rightarrow> 'n \<rightharpoonup> 'n" where
   "match_inter i j = (\<lambda>l. match_lists (i l) (j l))"
-
-(* 
-(\<lambda>l. set (zip (i l) (j l))) 
-*)
 
 
 lemma match_inter_point: 

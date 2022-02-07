@@ -13,4 +13,9 @@ lemma map2set_union:
   by (smt (z3) assms Un_iff dom_map_add map2set_def map_add_comm map_le_def 
                map_le_iff_map_add_commute mem_Collect_eq)
 
+lemma map2set_single:
+  "map2set (Map.empty(x\<mapsto>y)) = {(x,y)}"
+  unfolding map2set_def
+    by simp
+
 end

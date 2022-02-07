@@ -10,7 +10,7 @@ abbreviation (import) nodes :: "('n,'l) component_model \<Rightarrow> 'n set" wh
   "nodes c \<equiv> graph_nodes (graph c)"
 abbreviation (import) transitions :: "('n,'l) component_model \<Rightarrow> 'n tss" where
   "transitions c \<equiv> graph_transitions (graph c)"
-abbreviation left_interface :: "('n,'l) component_model \<Rightarrow>  ('n,'l) interface" ("\<^sup>\<star> _" [81] 80) where
+abbreviation left_interface :: "('n,'l) component_model \<Rightarrow>  ('n,'l) interface" ("\<^sup>\<star>_" [81] 80) where
   "left_interface c \<equiv> fst c"
 abbreviation right_interface :: "('n,'l) component_model \<Rightarrow>  ('n,'l) interface" ("_\<^sup>\<star>" [81] 80) where
   "right_interface c \<equiv> snd (snd c)"
@@ -22,7 +22,7 @@ abbreviation empty :: "('n,'l) component_model" ("\<langle>\<rangle>") where
 
 lemma empty_interfaces[simp]:
   shows "\<^sup>\<star>\<langle>\<rangle> = \<lparr>\<rparr>"
-  and "\<langle>\<rangle>\<^sup>\<star> = \<lparr>\<rparr>"
+  and "\<langle>\<rangle>\<^sup>\<star>= \<lparr>\<rparr>"
   by simp+
 
 abbreviation is_component :: "('n,'l) component_model \<Rightarrow> bool" where
@@ -126,11 +126,20 @@ lemma  rename_nodes_alt:
 definition lrename_nodes :: "('n \<rightharpoonup> 'l) => ('l \<Rightarrow> 'n \<rightharpoonup> 'n) => ('n \<rightharpoonup> 'l)" where
   "lrename_nodes N M = N |` (-\<Union>{dom (M l) |l. True})"
 
-lemma lrename_nodes_a: 
+lemma lrename_nodes:
+  "lrename_nodes N M = N|`(\<Inter>{-dom (M l)|l. True})"
+  unfolding lrename_nodes_def restrict_map_def
+  by (simp add: full_SetCompr_eq)
+
+lemma lrename_nodes_var: 
   "lrename_nodes N M  = (\<lambda>n. if n \<in> \<Union>{dom (M l) |l. True} then None else N n)"
   unfolding lrename_nodes_def restrict_map_def
   by (meson Compl_iff)
 
+
+lemma dom_lrename:
+  "dom(lrename_nodes N M) = dom N \<inter> (\<Inter>{-dom (M l)|l. True})"
+  by (simp add: lrename_nodes)
 
 
 (* can probably be made more beautiful *)
@@ -141,53 +150,182 @@ definition comp_merge :: "('n,'l) component_model \<Rightarrow> ('n,'l) componen
       (\<^sup>\<star>c @@ inter_prune (\<^sup>\<star>d) (c\<^sup>\<star>)),
       (lrename_nodes (fst(graph c)) (match_inter (c\<^sup>\<star>) (\<^sup>\<star>d)) ++ (fst(graph d)),
        lrename_tss (transitions c) (match_inter (c\<^sup>\<star>) (\<^sup>\<star>d)) \<union> transitions d),
-      (d\<^sup>\<star> @@ inter_prune (c\<^sup>\<star>) (\<^sup>\<star>d)))"
+      (d\<^sup>\<star>@@ inter_prune (c\<^sup>\<star>) (\<^sup>\<star>d)))"
 
 
 lemma comp_merge_left:
-  "\<^sup>\<star>c @@ inter_prune (\<^sup>\<star> d @@ inter_prune (\<^sup>\<star>e) (d\<^sup>\<star>)) (c\<^sup>\<star>) =
-    \<^sup>\<star>c @@ inter_prune (\<^sup>\<star> d) (c\<^sup>\<star>) @@ inter_prune (\<^sup>\<star>e) (d\<^sup>\<star> @@ inter_prune (c\<^sup>\<star>) (\<^sup>\<star>d))"
+  "\<^sup>\<star>c @@ inter_prune (\<^sup>\<star>d @@ inter_prune (\<^sup>\<star>e) (d\<^sup>\<star>)) (c\<^sup>\<star>) =
+    \<^sup>\<star>c @@ inter_prune (\<^sup>\<star>d) (c\<^sup>\<star>) @@ inter_prune (\<^sup>\<star>e) (d\<^sup>\<star>@@ inter_prune (c\<^sup>\<star>) (\<^sup>\<star>d))"
   unfolding inter_prune_def inter_comp_def
   apply(standard)
   by (simp add: add.commute)
 
-
-lemma comp_merge_graph_nodes:
-(*  assumes "is_component c"
-  and  "is_component d"
-  and  "is_component e" *)
-shows "lrename_nodes (fst (graph c)) (match_inter (c\<^sup>\<star>) (\<^sup>\<star> d @@ inter_prune (\<^sup>\<star> e) (d\<^sup>\<star>))) ++
-    lrename_nodes (fst (graph d)) (match_inter (d\<^sup>\<star>) (\<^sup>\<star> e)) ++
-    fst (graph e) =
-    lrename_nodes (lrename_nodes (fst (graph c)) (match_inter (c\<^sup>\<star>) (\<^sup>\<star> d)) ++ fst (graph d))
-     (match_inter (d\<^sup>\<star> @@ inter_prune (c\<^sup>\<star>) (\<^sup>\<star> d)) (\<^sup>\<star> e)) ++
-    fst (graph e)"
-  unfolding lrename_nodes_def match_inter_def inter_prune_def
-  apply(standard)
+(*
+lemma a1:
+ "dom(M |` (A\<inter>-(dom (N))\<union>(A\<inter>-B))) \<inter> dom(N|`B) = {}"
+  unfolding dom_def restrict_map_def
   apply clarsimp
+  by fastforce
+
+lemma a2:
+ "M |`A ++ N|`B = ((M++(N|`B)) |` (A\<inter>-(dom (N))\<union> (A\<inter>-B)) ++ N|`B)"
+  unfolding restrict_map_def map_add_def dom_def
+  by fastforce
+
+lemma a3:
+  "length ((\<^sup>\<star>d @@ (\<lambda>l. drop (length ((d\<^sup>\<star>) l)) ((\<^sup>\<star>e) l))) l)
+    =
+   length ((\<^sup>\<star>d) l) + (max ((length((\<^sup>\<star>e) l))-(length ((d\<^sup>\<star>) l))) 0)"
+  by (simp add: inter_comp_def)
+
+lemma a4:
+  "((d\<^sup>\<star>@@ (\<lambda>l. drop (length ((\<^sup>\<star>d) l)) ((c\<^sup>\<star>) l))) l)
+   =
+   ((d\<^sup>\<star>) l) @ drop (length ((\<^sup>\<star>d) l)) ((c\<^sup>\<star>) l)"
+  by (simp add: inter_comp_def)   
+
+lemma a:
+  "M|`A ++ N|`B = M|`(A-dom(N|`B)) ++ N|`B"
+  unfolding restrict_map_def map_add_def dom_def
+  by fastforce
+*)
+lemma restrict_add_map_distribute: 
+  "(M|`A ++ N)|`B = (M|`A)|`B ++ N|`B"
+  unfolding restrict_map_def map_add_def
+  by fastforce
+
+lemma not_dom_none: "x\<notin>dom M \<Longrightarrow> M x = None"
+  unfolding dom_def by blast
+
+lemma doms_comp:
+  "dom(lrename_nodes (fst (graph c)) (match_inter (c\<^sup>\<star>) (\<^sup>\<star>d @@ inter_prune (\<^sup>\<star>e) (d\<^sup>\<star>))) ++
+    lrename_nodes (fst (graph d)) (match_inter (d\<^sup>\<star>) (\<^sup>\<star>e)) ++
+    fst (graph e)) = 
+dom(lrename_nodes (lrename_nodes (fst (graph c)) (match_inter (c\<^sup>\<star>) (\<^sup>\<star>d)) ++ fst (graph d))
+     (match_inter (d\<^sup>\<star>@@ inter_prune (c\<^sup>\<star>) (\<^sup>\<star>d)) (\<^sup>\<star>e)) ++
+    fst (graph e))"
+  apply(simp add:sup_commute dom_lrename match_inter_def  match_lists_dom inter_prune_def  inter_comp_def)
+  unfolding dom_def
+  sledgehammer 
   sledgehammer
-  sorry
-
-
-lemma comp_merge_graph_tss:
-  " tss_rename2 (transitions c) (match_inter (c\<^sup>\<star>) (\<^sup>\<star> d @@ inter_prune (\<^sup>\<star> e) (d\<^sup>\<star>))) \<union>
-    graph_transitions
-     (lrename_nodes (fst (graph d)) (match_inter (d\<^sup>\<star>) (\<^sup>\<star> e)) ++ fst (graph e),
-      tss_rename2 (transitions d) (match_inter (d\<^sup>\<star>) (\<^sup>\<star> e)) \<union> transitions e) =
-    tss_rename2
-     (graph_transitions
-       (lrename_nodes (fst (graph c)) (match_inter (c\<^sup>\<star>) (\<^sup>\<star> d)) ++ fst (graph d),
-        tss_rename2 (transitions c) (match_inter (c\<^sup>\<star>) (\<^sup>\<star> d)) \<union> transitions d))
-     (match_inter (d\<^sup>\<star> @@ inter_prune (c\<^sup>\<star>) (\<^sup>\<star> d)) (\<^sup>\<star> e)) \<union>
-    transitions e"
   apply standard
   sledgehammer
   sorry
 
 
+lemma comp_merge_graph_nodes_aux:
+  "(fst (graph c) |` \<Inter> {u. \<exists>l. u = - set (take (length ((\<^sup>\<star>d) l) + (length ((\<^sup>\<star>e) l) - length ((d\<^sup>\<star>) l))) ((c\<^sup>\<star>) l))} ++
+          fst (graph d) |` \<Inter> {u. \<exists>l. u = - set (take (length ((\<^sup>\<star>e) l)) ((d\<^sup>\<star>) l))} ++
+          fst (graph e))
+          x =
+         (fst (graph c) |`
+          (\<Inter> {u. \<exists>l. u = - set (take (length ((\<^sup>\<star>d) l)) ((c\<^sup>\<star>) l))} \<inter>
+           \<Inter> {u. \<exists>l. u = - set (take (length ((\<^sup>\<star>e) l)) ((d\<^sup>\<star>) l)) \<inter>
+                          - set (take (length ((\<^sup>\<star>e) l) - length ((d\<^sup>\<star>) l)) (drop (length ((\<^sup>\<star>d) l)) ((c\<^sup>\<star>) l)))}) ++
+          fst (graph d) |`
+          \<Inter> {u. \<exists>l. u = - set (take (length ((\<^sup>\<star>e) l)) ((d\<^sup>\<star>) l)) \<inter>
+                         - set (take (length ((\<^sup>\<star>e) l) - length ((d\<^sup>\<star>) l)) (drop (length ((\<^sup>\<star>d) l)) ((c\<^sup>\<star>) l)))} ++
+          fst (graph e))
+          x"
+  (is "(?l1 ++ ?l2 ++ ?l3) x = (?r1 ++ ?r2 ++ ?r3) x")
+proof -
+  have dom_iff: "dom(?l1 ++ ?l2 ++ ?l3) = dom(?r1 ++ ?r2 ++ ?r3)"
+    using doms_comp 
+    by (simp add: lrename_nodes match_inter_def inter_prune_def match_lists_dom 
+          inter_comp_def restrict_add_map_distribute)
+
+  have  "x\<notin>dom(?l1 ++ ?l2 ++ ?l3) \<or>
+         x\<in>dom(?l3) \<or>
+        (x\<in>dom ?l2 - dom ?l3 \<and> x\<in>dom ?r3) \<or>
+        (x\<in>dom ?l2 - dom ?l3 \<and> x\<in>dom ?r2) \<or>
+        (x\<in>dom ?l2 - dom ?l3 \<and> x\<in>dom ?r1 - dom ?r2) \<or>
+        (x\<in>dom ?l1 - dom ?l2 -dom ?l3 \<and> x\<in>dom ?r3) \<or>
+        (x\<in>dom ?l1 - dom ?l2 -dom ?l3 \<and> x\<in>dom ?r1) \<or>
+        (x\<in>dom ?l1 - dom ?l2 -dom ?l3 \<and> x\<in>dom ?r2 - dom ?r1)"
+    by (metis (no_types, lifting) DiffI domIff map_add_None dom_iff)
+  moreover
+  { (* shorten *)
+    assume a: "x\<notin>dom(?l1 ++ ?l2 ++ ?l3)"
+    hence lhs: "(?l1 ++ ?l2 ++ ?l3) x = None"
+      apply(rule not_dom_none) done
+
+    have "x\<notin>dom(?l1 ++ ?l2 ++ ?l3) \<longleftrightarrow> x\<notin>dom(?r1 ++ ?r2 ++ ?r3)"
+      using dom_iff by auto
+    hence ?thesis 
+      by (metis (no_types, lifting) domIff lhs)
+  }
+  moreover
+  { assume "x\<in>dom(?l3)"
+    hence ?thesis
+      by force
+  }
+  moreover
+  { assume "x\<in>dom ?l2 - dom ?l3 \<and> x\<in>dom ?r3"
+    hence ?thesis
+      by force
+  }
+  moreover
+  { assume "x\<in>dom ?l2 - dom ?l3 \<and> x\<in>dom ?r2"
+    hence ?thesis
+      by (simp add: map_add_dom_app_simps(1) map_add_dom_app_simps(3))
+  }
+  moreover
+  { assume "x\<in>dom ?l2 - dom ?l3 \<and> x\<in>dom ?r1 - dom ?r2"
+    hence ?thesis
+      by auto
+  }
+  moreover
+  { assume "x\<in>dom (?l1)-dom (?l2)-dom ?l3 \<and> x\<in>dom ?r3"
+    hence ?thesis
+      by force
+  }
+  moreover 
+  { assume "x\<in>dom ?l1 - dom ?l2 - dom ?l3 \<and> x\<in>dom ?r1"
+    hence ?thesis
+    by (smt (z3) DiffD2 IntD1 diff_eq domIff map_add_dom_app_simps(3) mem_Collect_eq mem_simps(11) restrict_map_def)
+  }
+  moreover
+  { assume "x\<in>dom (?l1)-dom (?l2)-dom ?l3 \<and> x\<in>dom(?r2)-dom(?r1)"
+    hence ?thesis
+      apply clarsimp by blast
+  }
+  ultimately show ?thesis 
+    by fastforce
+qed
+
+lemma comp_merge_graph_nodes:
+shows "lrename_nodes (fst (graph c)) (match_inter (c\<^sup>\<star>) (\<^sup>\<star>d @@ inter_prune (\<^sup>\<star>e) (d\<^sup>\<star>))) ++
+    lrename_nodes (fst (graph d)) (match_inter (d\<^sup>\<star>) (\<^sup>\<star>e)) ++
+    fst (graph e) =
+    lrename_nodes (lrename_nodes (fst (graph c)) (match_inter (c\<^sup>\<star>) (\<^sup>\<star>d)) ++ fst (graph d))
+     (match_inter (d\<^sup>\<star>@@ inter_prune (c\<^sup>\<star>) (\<^sup>\<star>d)) (\<^sup>\<star>e)) ++
+    fst (graph e)"
+  apply(standard)
+  by (simp add: lrename_nodes match_inter_def inter_prune_def match_lists_dom 
+                inter_comp_def restrict_add_map_distribute comp_merge_graph_nodes_aux)
+
+lemma comp_merge_graph_tss:
+  "lrename_tss (graph_transitions (graph c))
+     (match_inter (c\<^sup>\<star>) (\<^sup>\<star>d @@ inter_prune (\<^sup>\<star>e) (d\<^sup>\<star>))) \<union>
+    graph_transitions
+     (lrename_nodes (fst (graph d)) (match_inter (d\<^sup>\<star>) (\<^sup>\<star>e)) ++ fst (graph e),
+      lrename_tss (graph_transitions (graph d)) (match_inter (d\<^sup>\<star>) (\<^sup>\<star>e)) \<union>
+      graph_transitions (graph e)) =
+    lrename_tss
+     (graph_transitions
+       (lrename_nodes (fst (graph c)) (match_inter (c\<^sup>\<star>) (\<^sup>\<star>d)) ++ fst (graph d),
+        lrename_tss (graph_transitions (graph c)) (match_inter (c\<^sup>\<star>) (\<^sup>\<star>d)) \<union>
+        graph_transitions (graph d)))
+     (match_inter (d\<^sup>\<star>@@ inter_prune (c\<^sup>\<star>) (\<^sup>\<star>d)) (\<^sup>\<star>e)) \<union>
+    graph_transitions (graph e)"
+  unfolding lrename_tss_def rename_tss_def inter_prune_def lrename_nodes_def
+  apply standard
+  sorry
+
+
 lemma comp_merge_right:
-  "e\<^sup>\<star> @@ inter_prune (d\<^sup>\<star>) (\<^sup>\<star> e) @@ inter_prune (c\<^sup>\<star>) (\<^sup>\<star> d @@ inter_prune (\<^sup>\<star> e) (d\<^sup>\<star>)) =
-    e\<^sup>\<star> @@ inter_prune (d\<^sup>\<star> @@ inter_prune (c\<^sup>\<star>) (\<^sup>\<star> d)) (\<^sup>\<star> e)"
+  "e\<^sup>\<star>@@ inter_prune (d\<^sup>\<star>) (\<^sup>\<star>e) @@ inter_prune (c\<^sup>\<star>) (\<^sup>\<star>d @@ inter_prune (\<^sup>\<star>e) (d\<^sup>\<star>)) =
+    e\<^sup>\<star>@@ inter_prune (d\<^sup>\<star>@@ inter_prune (c\<^sup>\<star>) (\<^sup>\<star>d)) (\<^sup>\<star>e)"
   unfolding inter_prune_def inter_comp_def
   apply(standard)
   by (simp add: add.commute)
